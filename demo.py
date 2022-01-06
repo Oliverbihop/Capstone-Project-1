@@ -7,8 +7,10 @@ from model_VGG16 import VGG16
 import torch
 import matplotlib.pyplot as plt
 import os 
+import torch.nn.functional as F
 import time
 from torchvision import transforms
+import torch.nn as nn
 from PIL import Image, ImageOps
 from torch.autograd import Variable
 #stops = cv2.CascadeClassifier('haar_cascade/stop_sign.xml')
@@ -22,69 +24,51 @@ foder = 'none'   #ahead: 14, noright: 12, none: 124,
 #test_img = os.listdir(path)
 # print(test_img)
 
-# def output(frame, pre):
-#     print("boundingbox: ", pre)
-#     y1 = pre[0][1]
-#     y2 = pre[0][1] + pre[0][2]
-#     x1 = pre[0][0]
-#     x2 = pre[0][0] + pre[0][3]
-#     img = frame[y1:y2, x1:x2]
-#     # img = frame[17:17+43, 113:113+43]
-#     # cv2.imshow("asd", img)
-#     # cv2.waitKey(0)
-#     return img
 
+class Network(nn.Module):
+    def __init__(self):
+        super(Network, self).__init__()
+        self.conv1 = nn.Conv2d(3, 8, 3, 2, 1)
+        self.conv2 = nn.Conv2d(8, 16, 3, 1, 1)
+        self.conv3 = nn.Conv2d(16, 32, 3, 1, 1)
+        self.dropout1 = nn.Dropout(0.5)
+        self.dropout2 = nn.Dropout(0.25)
+        self.fc1 = nn.Linear(512, 6) # stride 1: 2304, 2:512
+        #self.fc2 = nn.Linear(128, 10)
 
-# def detect_TrafficSign(frame):
-#     # frame=frame[40:180,160:320]
-#     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-#     stop_pre = stops.detectMultiScale(gray, #X,Y - W,H
-#     scaleFactor=1.05,
-#     minNeighbors=2,
-#     minSize=(20, 20),
-#     maxSize=(60, 60),
-#     flags = 0)
-#     right_pre = rights.detectMultiScale(gray, #X,Y - W,H
-#     scaleFactor=1.05,
-#     minNeighbors=2,
-#     minSize=(20, 20),
-#     maxSize=(60, 60),
-#     flags = 0)
-#     ahead_pre = aheads.detectMultiScale(gray, #X,Y - W,H
-#     scaleFactor=1.05,
-#     minNeighbors=2,
-#     minSize=(20, 20),
-#     maxSize=(60, 60),
-#     flags = 0)
+    def forward(self, x):
+        x = self.conv1(x) #48.48.32     #32.32.8
+        x = F.leaky_relu(x)
+        x = F.max_pool2d(x, 2)
+        x = self.conv2(x) #24.24.32     #16.16.16
+        x = F.leaky_relu(x)
+        x = F.max_pool2d(x, 2)
+        x = self.conv3(x) #12.12.64     #8.8.32
+        x = F.leaky_relu(x)
+        x = F.max_pool2d(x, 2) #6.6.64  #4.4.32
+        # x = self.dropout1(x)
+        x = torch.flatten(x, 1) # 2304
+        x = self.dropout1(x)
+        #x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        # x = F.leaky_relu(x)
+        # x = self.dropout2(x)
+        # x = self.fc2(x)
+        output = F.log_softmax(x, dim=1)
+        return output
     
-#     if len(stop_pre)>0:
-#         print("stops")
-#         img = output(frame, stop_pre)
-#         Run_Predict(img)
-
-#     if len(right_pre)>0:
-#         print("rights")
-#         img = output(frame, right_pre)
-#         Run_Predict(img)
-
-#     if len(ahead_pre)>0:
-#         print("ahead")
-#         img = output(frame, ahead_pre)
-#         Run_Predict(img)
-
-    
-classes = ['uyen', 'thayphuc', 'phuoc', 'nam', 'khoa']
+classes = ['uyen', 'nien', 'tri', 'tin', 'khoa','none']
 
 # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 device = torch.device("cpu")
 #print('device:', device)
 
 # Define hyper-parameter
-img_size = (48, 48)
+img_size = (64, 64)
 
 # define model
-model = VGG16()
-my_model = model.load_state_dict(torch.load('./epoch_39.pth', map_location=torch.device('cpu')))
+model = Network()
+my_model = model.load_state_dict(torch.load('./cnn1.pt', map_location=torch.device('cpu')))
 
 #port to model to gpu if you have gpu
 model = model.to(device)
@@ -103,7 +87,7 @@ def Predict(img_raw):
         #img1 = cv2.cvtColor(img_raw,cv2.COLOR_BGR2RGB)
      
         img1 = Image.fromarray(img_raw)
-        loader = transforms.Compose([transforms.Resize((48, 48)),transforms.ToTensor(),transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))])
+        loader = transforms.Compose([transforms.Resize((64, 64)),transforms.ToTensor(),transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))])
         img_tensor = loader(img1).unsqueeze(0)
         img_rgb = Variable(img_tensor, requires_grad=False)
 
